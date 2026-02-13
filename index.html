@@ -826,5 +826,501 @@
           </div>
         `;
       }
+      html += '</div>';
+      container.innerHTML = html;
+    }
+   // ============ TEMPLATES ============
+    function renderTemplates() {
+      const container = document.getElementById('templates-list');
       
-   
+      if (templates.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-400 col-span-full">
+            <p class="text-4xl mb-2">📝</p>
+            <p>No templates available.</p>
+            ${isAdmin ? '<p class="text-sm mt-2">Click "New Template" to create one.</p>' : ''}
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = templates.map(template => {
+        const tasksData = JSON.parse(template.tasks || '[]');
+        const totalTasks = tasksData.reduce((sum, day) => sum + (day.tasks?.length || 0), 0);
+        const inUse = groups.some(g => g.templateId === template.__backendId);
+        
+        return `
+          <div class="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition">
+            <div class="flex items-start justify-between mb-3">
+              <h3 class="font-semibold text-slate-800">${escapeHtml(template.name)}</h3>
+              ${inUse ? '<span class="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded">In Use</span>' : ''}
+            </div>
+            <p class="text-sm text-slate-500 mb-3 line-clamp-2">${escapeHtml(template.description || 'No description')}</p>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-slate-400">${totalTasks} tasks</span>
+              ${isAdmin ? `
+                <button onclick="editTemplate('${template.__backendId}')" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                  Edit →
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openTemplateEditor(templateId = null) {
+      editingTemplateId = templateId;
+      editingDayIndex = 0;
+      
+      if (templateId) {
+        const template = templates.find(t => t.__backendId === templateId);
+        if (template) {
+          document.getElementById('template-name-input').value = template.name;
+          document.getElementById('template-desc-input').value = template.description || '';
+          templateDays = JSON.parse(template.tasks || '[]');
+          if (templateDays.length === 0) {
+            initializeTemplateDays();
+          }
+        }
+        document.getElementById('template-editor-title').textContent = 'Edit Template';
+      } else {
+        document.getElementById('template-name-input').value = '';
+        document.getElementById('template-desc-input').value = '';
+        initializeTemplateDays();
+        document.getElementById('template-editor-title').textContent = 'Create Template';
+      }
+      
+      navigate('template-editor');
+    }
+
+    function editTemplate(templateId) {
+      openTemplateEditor(templateId);
+    }
+
+    function renderTemplateEditor() {
+      const tabsContainer = document.getElementById('day-tabs');
+      
+      tabsContainer.innerHTML = Array.from({ length: 14 }, (_, i) => {
+        const dayData = templateDays[i] || { day: i + 1, tasks: [] };
+        const taskCount = dayData.tasks?.length || 0;
+        const isActive = editingDayIndex === i;
+        
+        return `
+          <button onclick="selectDay(${i})" class="px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap ${isActive ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">
+            Day ${i + 1} ${taskCount > 0 ? `(${taskCount})` : ''}
+          </button>
+        `;
+      }).join('');
+      
+      renderDayEditor();
+    }
+
+    function selectDay(index) {
+      editingDayIndex = index;
+      renderTemplateEditor();
+    }
+
+    function renderDayEditor() {
+      const container = document.getElementById('day-editor-content');
+      const dayData = templateDays[editingDayIndex] || { day: editingDayIndex + 1, tasks: [] };
+      const tasks = dayData.tasks || [];
+      
+      container.innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+          <h4 class="font-semibold text-slate-800">Day ${editingDayIndex + 1} Tasks</h4>
+          <button onclick="openAddTaskModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition">
+            + Add Task
+          </button>
+        </div>
+        ${tasks.length === 0 ? `
+          <div class="text-center py-8 text-slate-400">
+            <p>No tasks for this day yet.</p>
+          </div>
+        ` : `
+          <div class="space-y-2">
+            ${tasks.sort((a, b) => a.time.localeCompare(b.time)).map((task, idx) => `
+              <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
+                <div class="flex items-center gap-3">
+                  <span class="text-xl">${getTaskIcon(task.type)}</span>
+                  <div>
+                    <p class="font-medium text-slate-800">${escapeHtml(task.title)}</p>
+                    <p class="text-sm text-slate-500">${formatTime(task.time)} • ${capitalizeFirst(task.type)}</p>
+                  </div>
+                </div>
+                <button onclick="removeTask(${idx})" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition">
+                  🗑️
+                </button>
+              </div>
+            `).join('')}
+          </div>
+        `}
+      `;
+    }
+
+    function openAddTaskModal() {
+      document.getElementById('add-task-modal').classList.remove('hidden');
+      document.getElementById('task-title-input').value = '';
+      document.getElementById('task-desc-input').value = '';
+      document.getElementById('task-time-input').value = '09:00';
+      document.getElementById('task-type-input').value = 'text';
+      document.getElementById('task-media-input').value = '';
+      document.getElementById('task-reminder-input').value = '30';
+      updateTaskMediaVisibility();
+    }
+
+    function closeAddTaskModal() {
+      document.getElementById('add-task-modal').classList.add('hidden');
+    }
+
+    function updateTaskMediaVisibility() {
+      const type = document.getElementById('task-type-input').value;
+      const mediaSection = document.getElementById('task-media-section');
+      
+      if (type === 'text') {
+        mediaSection.classList.add('hidden');
+      } else {
+        mediaSection.classList.remove('hidden');
+      }
+    }
+
+    // Add event listener for task type change
+    document.getElementById('task-type-input').addEventListener('change', updateTaskMediaVisibility);
+
+    function addTaskToDay() {
+      const title = document.getElementById('task-title-input').value.trim();
+      const description = document.getElementById('task-desc-input').value.trim();
+      const time = document.getElementById('task-time-input').value;
+      const type = document.getElementById('task-type-input').value;
+      const mediaUrl = document.getElementById('task-media-input').value.trim();
+      const reminder = parseInt(document.getElementById('task-reminder-input').value) || 30;
+      
+      if (!title || !time) {
+        showToast('Please fill in required fields', 'error');
+        return;
+      }
+      
+      const task = {
+        id: 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+        title,
+        description,
+        time,
+        type,
+        mediaUrl: type !== 'text' ? mediaUrl : '',
+        reminderOffset: reminder
+      };
+      
+      if (!templateDays[editingDayIndex]) {
+        templateDays[editingDayIndex] = { day: editingDayIndex + 1, tasks: [] };
+      }
+      if (!templateDays[editingDayIndex].tasks) {
+        templateDays[editingDayIndex].tasks = [];
+      }
+      
+      templateDays[editingDayIndex].tasks.push(task);
+      
+      closeAddTaskModal();
+      renderTemplateEditor();
+      showToast('Task added', 'success');
+    }
+
+    function removeTask(index) {
+      if (templateDays[editingDayIndex] && templateDays[editingDayIndex].tasks) {
+        templateDays[editingDayIndex].tasks.splice(index, 1);
+        renderDayEditor();
+        showToast('Task removed', 'info');
+      }
+    }
+
+    async function saveTemplate() {
+      const name = document.getElementById('template-name-input').value.trim();
+      const description = document.getElementById('template-desc-input').value.trim();
+      
+      if (!name) {
+        showToast('Please enter a template name', 'error');
+        return;
+      }
+      
+      const templateData = {
+        type: 'template',
+        name,
+        description,
+        tasks: JSON.stringify(templateDays),
+        createdAt: new Date().toISOString()
+      };
+      
+      let result;
+      
+      if (editingTemplateId) {
+        const existing = templates.find(t => t.__backendId === editingTemplateId);
+        if (existing) {
+          result = await window.dataSdk.update({
+            ...existing,
+            ...templateData
+          });
+        }
+      } else {
+        if (allData.length >= 999) {
+          showToast('Maximum data limit reached. Please delete some items first.', 'error');
+          return;
+        }
+        result = await window.dataSdk.create(templateData);
+      }
+      
+      if (result && result.isOk) {
+        showToast(editingTemplateId ? 'Template updated' : 'Template created', 'success');
+        navigate('templates');
+      } else {
+        showToast('Failed to save template', 'error');
+      }
+    }
+
+    // ============ TASK MANAGEMENT ============
+    function openTaskModal(groupId, day, taskId) {
+      const group = groups.find(g => g.__backendId === groupId);
+      if (!group) return;
+      
+      const tasks = getTasksForDay(group, day);
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+      
+      const dayInfo = getGroupDayInfo(group);
+      const status = getTaskStatus(group, day, task);
+      const isPast = day < dayInfo.currentDay;
+      const isFuture = day > dayInfo.currentDay;
+      
+      document.getElementById('task-modal-title').textContent = task.title;
+      
+      let content = `
+        <div class="space-y-4">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">${getTaskIcon(task.type)}</span>
+            <div>
+              <p class="font-medium text-slate-800">${capitalizeFirst(task.type)}</p>
+              <p class="text-sm text-slate-500">Day ${day} • ${formatTime(task.time)}</p>
+            </div>
+            <span class="ml-auto px-3 py-1 text-sm font-medium rounded ${getStatusClass(status)}">${capitalizeFirst(status)}</span>
+          </div>
+          
+          ${task.description ? `
+            <div class="p-3 bg-slate-50 rounded-lg">
+              <p class="text-sm text-slate-600">${escapeHtml(task.description)}</p>
+            </div>
+          ` : ''}
+          
+          ${task.mediaUrl ? `
+            <div class="p-3 bg-slate-50 rounded-lg">
+              <p class="text-sm text-slate-500 mb-2">Attached Media:</p>
+              <a href="${escapeHtml(task.mediaUrl)}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-700 text-sm break-all">
+                ${escapeHtml(task.mediaUrl)}
+              </a>
+            </div>
+          ` : ''}
+          
+          ${task.reminderOffset ? `
+            <p class="text-sm text-slate-500">⏰ Reminder: ${task.reminderOffset} minutes before</p>
+          ` : ''}
+        </div>
+      `;
+      
+      document.getElementById('task-modal-content').innerHTML = content;
+      
+      const completeBtn = document.getElementById('task-complete-btn');
+      if (status === 'completed' || isFuture) {
+        completeBtn.classList.add('hidden');
+      } else {
+        completeBtn.classList.remove('hidden');
+        pendingTaskCompletion = { groupId, day, taskId };
+      }
+      
+      document.getElementById('task-modal').classList.remove('hidden');
+    }
+
+    function closeTaskModal() {
+      document.getElementById('task-modal').classList.add('hidden');
+      pendingTaskCompletion = null;
+    }
+
+    function confirmTaskCompletion() {
+      if (!pendingTaskCompletion) return;
+      
+      openConfirmModal(
+        'Are you sure you want to mark this task as complete? This action cannot be undone.',
+        async () => {
+          await completeTask();
+        }
+      );
+    }
+
+    async function completeTask() {
+      if (!pendingTaskCompletion) return;
+      
+      const { groupId, day, taskId } = pendingTaskCompletion;
+      const group = groups.find(g => g.__backendId === groupId);
+      if (!group) return;
+      
+      // Get completed tasks from session storage
+      const storageKey = `completed_${groupId}`;
+      let completed = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
+      
+      if (!completed[day]) {
+        completed[day] = [];
+      }
+      
+      if (!completed[day].includes(taskId)) {
+        completed[day].push(taskId);
+      }
+      
+      sessionStorage.setItem(storageKey, JSON.stringify(completed));
+      
+      closeConfirmModal();
+      closeTaskModal();
+      showToast('Task marked as complete', 'success');
+      renderCurrentView();
+    }
+
+    // ============ HELPER FUNCTIONS ============
+    function getGroupDayInfo(group) {
+      const startDate = new Date(group.startDate + 'T00:00:00+05:30'); // IST
+      const now = new Date();
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 13);
+      
+      const diffTime = now - startDate;
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      const currentDay = diffDays + 1;
+      
+      return { currentDay, startDate, endDate };
+    }
+
+    function getTasksForDay(group, day) {
+      const tasksData = JSON.parse(group.tasks || '[]');
+      const dayData = tasksData.find(d => d.day === day);
+      return dayData?.tasks || [];
+    }
+
+    function getTaskStatus(group, day, task) {
+      const storageKey = `completed_${group.__backendId}`;
+      const completed = JSON.parse(sessionStorage.getItem(storageKey) || '{}');
+      
+      if (completed[day]?.includes(task.id)) {
+        return 'completed';
+      }
+      
+      const dayInfo = getGroupDayInfo(group);
+      
+      if (day < dayInfo.currentDay) {
+        return 'overdue';
+      }
+      
+      if (day === dayInfo.currentDay) {
+        const now = new Date();
+        const [hours, minutes] = task.time.split(':').map(Number);
+        const taskTime = new Date();
+        taskTime.setHours(hours, minutes, 0, 0);
+        
+        if (now > taskTime) {
+          return 'overdue';
+        }
+      }
+      
+      return 'upcoming';
+    }
+
+    function getStatusClass(status) {
+      switch (status) {
+        case 'completed': return 'status-completed';
+        case 'overdue': return 'status-overdue';
+        case 'upcoming': return 'status-upcoming';
+        default: return 'bg-slate-100';
+      }
+    }
+
+    function getTaskIcon(type) {
+      switch (type) {
+        case 'text': return '📝';
+        case 'image': return '🖼️';
+        case 'pdf': return '📄';
+        case 'video': return '🎬';
+        default: return '📋';
+      }
+    }
+
+    function formatTime(time) {
+      if (!time) return '';
+      const [hours, minutes] = time.split(':');
+      const h = parseInt(hours);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const hour12 = h % 12 || 12;
+      return `${hour12}:${minutes} ${ampm}`;
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-IN', { 
+        day: 'numeric', 
+        month: 'short', 
+        year: 'numeric' 
+      });
+    }
+
+    function capitalizeFirst(str) {
+      return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ============ MODALS ============
+    function openConfirmModal(message, callback) {
+      document.getElementById('confirm-modal-message').textContent = message;
+      document.getElementById('confirm-modal-btn').onclick = callback;
+      document.getElementById('confirm-modal').classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirm-modal').classList.add('hidden');
+    }
+
+    // ============ TOAST NOTIFICATIONS ============
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white font-medium';
+      
+      switch (type) {
+        case 'success':
+          toast.classList.add('bg-green-600');
+          break;
+        case 'error':
+          toast.classList.add('bg-red-600');
+          break;
+        case 'info':
+        default:
+          toast.classList.add('bg-blue-600');
+      }
+      
+      toast.classList.remove('hidden');
+      
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 3000);
+    }
+
+    // ============ RESTORE SESSION ============
+    function restoreSession() {
+      if (sessionStorage.getItem('isAdmin') === 'true') {
+        isAdmin = true;
+      }
+    }
+
+    // ============ INITIALIZE ============
+    restoreSession();
+    initApp();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9cd1c5ef4023fde8',t:'MTc3MDk1ODk0My4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
