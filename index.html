@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="en" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HR Internship Automation</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="/_sdk/data_sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'IBM Plex Sans', sans-serif; }
+    .task-card { transition: all 0.2s ease; }
+    .task-card:hover { transform: translateY(-2px); }
+    .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; }
+    .status-completed { background: #dcfce7; color: #166534; }
+    .status-overdue { background: #fee2e2; color: #991b1b; }
+    .status-upcoming { background: #dbeafe; color: #1e40af; }
+    .modal-overlay { background: rgba(0,0,0,0.5); }
+    .day-locked { opacity: 0.5; pointer-events: none; }
+    .day-past { background: #f3f4f6; }
+  </style>
+  <style>body { box-sizing: border-box; }</style>
+ </head>
+ <body class="h-full bg-slate-50 overflow-auto">
+  <div id="app" class="h-full w-full"><!-- Header -->
+   <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+     <h1 id="app-title" class="text-xl font-bold text-slate-800">HR Internship Automation</h1>
+     <div class="flex items-center gap-3"><span id="admin-badge" class="hidden px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded">Admin Mode</span> <button id="admin-toggle-btn" onclick="toggleAdminModal()" class="px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg transition"> 🔐 Admin </button>
+     </div>
+    </div><!-- Navigation -->
+    <nav class="max-w-7xl mx-auto px-4 flex gap-1"><button onclick="navigate('dashboard')" class="nav-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 border-b-2 border-transparent" data-tab="dashboard">Dashboard</button> <button onclick="navigate('groups')" class="nav-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 border-b-2 border-transparent" data-tab="groups">Groups</button> <button onclick="navigate('templates')" class="nav-tab px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 border-b-2 border-transparent" data-tab="templates">Templates</button>
+    </nav>
+   </header><!-- Main Content -->
+   <main class="max-w-7xl mx-auto px-4 py-6"><!-- Dashboard View -->
+    <section id="view-dashboard" class="view-section">
+     <div class="mb-6">
+      <h2 class="text-2xl font-bold text-slate-800">Today's Tasks</h2>
+      <p class="text-slate-500 mt-1">Tasks due today across all active groups</p>
+     </div>
+     <div id="dashboard-tasks" class="space-y-4">
+      <div class="text-center py-12 text-slate-400">
+       <p class="text-4xl mb-2">📋</p>
+       <p>No active groups yet. Create a group to get started.</p>
+      </div>
+     </div>
+    </section><!-- Groups View -->
+    <section id="view-groups" class="view-section hidden">
+     <div class="flex items-center justify-between mb-6">
+      <div>
+       <h2 class="text-2xl font-bold text-slate-800">Internship Groups</h2>
+       <p class="text-slate-500 mt-1">Manage your 14-day internship batches</p>
+      </div><button onclick="openCreateGroupModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition flex items-center gap-2"> <span>+</span> New Group </button>
+     </div>
+     <div id="groups-list" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div class="text-center py-12 text-slate-400 col-span-full">
+       <p class="text-4xl mb-2">👥</p>
+       <p>No groups created yet.</p>
+      </div>
+     </div>
+    </section><!-- Group Detail View -->
+    <section id="view-group-detail" class="view-section hidden">
+     <div class="mb-6"><button onclick="navigate('groups')" class="text-blue-600 hover:text-blue-700 text-sm mb-2 flex items-center gap-1"> ← Back to Groups </button>
+      <div class="flex items-start justify-between">
+       <div>
+        <h2 id="group-detail-name" class="text-2xl font-bold text-slate-800">Group Name</h2>
+        <p id="group-detail-dates" class="text-slate-500 mt-1">Day X of 14</p>
+       </div><a id="group-whatsapp-btn" href="#" target="_blank" rel="noopener noreferrer" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition flex items-center gap-2"> 💬 WhatsApp Group </a>
+      </div>
+     </div><!-- Group Tabs -->
+     <div class="border-b border-slate-200 mb-4">
+      <div class="flex gap-1"><button onclick="switchGroupTab('today')" class="group-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent" data-tab="today">Today's Tasks</button> <button onclick="switchGroupTab('remaining')" class="group-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent" data-tab="remaining">Remaining Tasks</button> <button onclick="switchGroupTab('all')" class="group-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent" data-tab="all">All Days</button>
+      </div>
+     </div>
+     <div id="group-tab-content"></div>
+    </section><!-- Templates View -->
+    <section id="view-templates" class="view-section hidden">
+     <div class="flex items-center justify-between mb-6">
+      <div>
+       <h2 class="text-2xl font-bold text-slate-800">Templates</h2>
+       <p class="text-slate-500 mt-1">Reusable 14-day internship schedules</p>
+      </div><button id="create-template-btn" onclick="openTemplateEditor()" class="hidden px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition flex items-center gap-2"> <span>+</span> New Template </button>
+     </div>
+     <div id="templates-list" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div class="text-center py-12 text-slate-400 col-span-full">
+       <p class="text-4xl mb-2">📝</p>
+       <p>No templates available.</p>
+      </div>
+     </div>
+    </section><!-- Template Editor View -->
+    <section id="view-template-editor" class="view-section hidden">
+     <div class="mb-6"><button onclick="navigate('templates')" class="text-blue-600 hover:text-blue-700 text-sm mb-2 flex items-center gap-1"> ← Back to Templates </button>
+      <h2 id="template-editor-title" class="text-2xl font-bold text-slate-800">Create Template</h2>
+     </div>
+     <div class="bg-white rounded-xl border border-slate-200 p-6">
+      <div class="grid gap-4 mb-6">
+       <div><label class="block text-sm font-medium text-slate-700 mb-1">Template Name *</label> <input type="text" id="template-name-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Marketing Intern Program">
+       </div>
+       <div><label class="block text-sm font-medium text-slate-700 mb-1">Description</label> <textarea id="template-desc-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows="2" placeholder="Brief description of this internship program"></textarea>
+       </div>
+      </div><!-- Days Editor -->
+      <div class="border-t border-slate-200 pt-6">
+       <h3 class="text-lg font-semibold text-slate-800 mb-4">Schedule (14 Days)</h3>
+       <div class="flex gap-2 mb-4 overflow-x-auto pb-2">
+        <div id="day-tabs" class="flex gap-1"></div>
+       </div>
+       <div id="day-editor-content" class="bg-slate-50 rounded-lg p-4"><!-- Day tasks will be rendered here -->
+       </div>
+      </div>
+      <div class="flex justify-end gap-3 mt-6 pt-6 border-t border-slate-200"><button onclick="navigate('templates')" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium">Cancel</button> <button onclick="saveTemplate()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition">Save Template</button>
+      </div>
+     </div>
+    </section>
+   </main><!-- Admin Modal -->
+   <div id="admin-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+     <h3 class="text-xl font-bold text-slate-800 mb-4">Admin Access</h3>
+     <div id="admin-login-form">
+      <div class="mb-4"><label class="block text-sm font-medium text-slate-700 mb-1">Admin Code</label> <input type="password" id="admin-code-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Enter admin code">
+      </div>
+      <div class="mb-4"><label class="block text-sm font-medium text-slate-700 mb-1">Admin Email</label> <input type="email" id="admin-email-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="your-admin@email.com">
+      </div>
+      <p id="admin-error" class="hidden text-red-600 text-sm mb-4"></p>
+      <div class="flex justify-end gap-3"><button onclick="closeAdminModal()" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium">Cancel</button> <button onclick="verifyAdmin()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition">Verify</button>
+      </div>
+     </div>
+     <div id="admin-logout-form" class="hidden">
+      <p class="text-slate-600 mb-4">You are logged in as admin.</p>
+      <div class="flex justify-end gap-3"><button onclick="closeAdminModal()" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium">Close</button> <button onclick="logoutAdmin()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition">Logout</button>
+      </div>
+     </div>
+    </div>
+   </div><!-- Create Group Modal -->
+   <div id="create-group-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+     <h3 class="text-xl font-bold text-slate-800 mb-4">Create New Group</h3>
+     <div class="space-y-4">
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">Group Name *</label> <input type="text" id="new-group-name" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Batch 2024-01">
+      </div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">Select Template *</label> <select id="new-group-template" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"> <option value="">Choose a template...</option> </select>
+      </div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">Start Date (IST) *</label> <input type="date" id="new-group-start-date" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+      </div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">WhatsApp Group Link *</label> <input type="url" id="new-group-whatsapp" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="https://chat.whatsapp.com/...">
+      </div>
+      <p id="create-group-error" class="hidden text-red-600 text-sm"></p>
+     </div>
+     <div class="flex justify-end gap-3 mt-6"><button onclick="closeCreateGroupModal()" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium">Cancel</button> <button onclick="createGroup()" id="create-group-submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition">Create Group</button>
+     </div>
+    </div>
+   </div><!-- Task Completion Modal -->
+   <div id="task-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 p-6">
+     <h3 id="task-modal-title" class="text-xl font-bold text-slate-800 mb-2">Task Details</h3>
+     <div id="task-modal-content" class="mb-6"><!-- Task content will be rendered here -->
+     </div>
+     <div id="task-modal-actions" class="flex justify-end gap-3"><button onclick="closeTaskModal()" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium">Close</button> <button id="task-complete-btn" onclick="confirmTaskCompletion()" class="hidden px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition">Mark Complete</button>
+     </div>
+    </div>
+   </div><!-- Confirmation Modal -->
+   <div id="confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 p-6">
+     <h3 class="text-lg font-bold text-slate-800 mb-2">Confirm Action</h3>
+     <p id="confirm-modal-message" class="text-slate-600 mb-6">Are you sure?</p>
+     <div class="flex justify-end gap-3"><button onclick="closeConfirmModal()" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium">Cancel</button> <button id="confirm-modal-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition">Confirm</button>
+     </div>
+    </div>
+   </div><!-- Add Task Modal -->
+   <div id="add-task-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6 max-h-[90%] overflow-y-auto">
+     <h3 class="text-xl font-bold text-slate-800 mb-4">Add Task</h3>
+     <div class="space-y-4">
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">Task Title *</label> <input type="text" id="task-title-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Submit daily report">
+      </div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">Description</label> <textarea id="task-desc-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" rows="2" placeholder="Task instructions..."></textarea>
+      </div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">Time (IST) *</label> <input type="time" id="task-time-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+      </div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">Task Type *</label> <select id="task-type-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"> <option value="text">Text</option> <option value="image">Image</option> <option value="pdf">PDF</option> <option value="video">Video</option> </select>
+      </div>
+      <div id="task-media-section" class="hidden"><label class="block text-sm font-medium text-slate-700 mb-1">Media URL</label> <input type="url" id="task-media-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="https://drive.google.com/...">
+      </div>
+      <div><label class="block text-sm font-medium text-slate-700 mb-1">Reminder Offset (minutes before)</label> <input type="number" id="task-reminder-input" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" value="30" min="0">
+      </div>
+     </div>
+     <div class="flex justify-end gap-3 mt-6"><button onclick="closeAddTaskModal()" class="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium">Cancel</button> <button onclick="addTaskToDay()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition">Add Task</button>
+     </div>
+    </div>
+   </div><!-- Toast Notification -->
+   <div id="toast" class="hidden fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white font-medium"></div>
+  </div>
+  <script>
+    // ============ STATE MANAGEMENT ============
+    const defaultConfig = {
+      app_title: 'HR Internship Automation',
+      primary_color: '#2563eb',
+      secondary_color: '#64748b',
+      background_color: '#f8fafc',
+      surface_color: '#ffffff',
+      text_color: '#1e293b'
+    };
+
+    let config = { ...defaultConfig };
+    let isAdmin = false;
+    let currentView = 'dashboard';
+    let currentGroupId = null;
+    let currentGroupTab = 'today';
+    let editingTemplateId = null;
+    let editingDayIndex = 0;
+    let templateDays = [];
+    let pendingTaskCompletion = null;
+    let allData = [];
+    let templates = [];
+    let groups = [];
+
+    // Admin configuration
+    const ADMIN_CONFIG = {
+      code: 'admin2024',
+      allowedEmails: ['admin@company.com', 'hr@company.com']
+    };
+
+    // ============ DATA SDK HANDLER ============
+    const dataHandler = {
+      onDataChanged(data) {
+        allData = data;
+        templates = data.filter(d => d.type === 'template');
+        groups = data.filter(d => d.type === 'group');
+        renderCurrentView();
+      }
+    };
+
+    // ============ INITIALIZATION ============
+    async function initApp() {
+      // Initialize Element SDK
+      if (window.elementSdk) {
+        window.elementSdk.init({
+          defaultConfig,
+          onConfigChange: async (newConfig) => {
+            config = { ...defaultConfig, ...newConfig };
+            applyConfig();
+          },
+          mapToCapabilities: (cfg) => ({
+            recolorables: [
+              { get: () => cfg.primary_color || defaultConfig.primary_color, set: (v) => { cfg.primary_color = v; window.elementSdk.setConfig({ primary_color: v }); }},
+              { get: () => cfg.background_color || defaultConfig.background_color, set: (v) => { cfg.background_color = v; window.elementSdk.setConfig({ background_color: v }); }},
+              { get: () => cfg.surface_color || defaultConfig.surface_color, set: (v) => { cfg.surface_color = v; window.elementSdk.setConfig({ surface_color: v }); }},
+              { get: () => cfg.text_color || defaultConfig.text_color, set: (v) => { cfg.text_color = v; window.elementSdk.setConfig({ text_color: v }); }}
+            ],
+            borderables: [],
+            fontEditable: undefined,
+            fontSizeable: undefined
+          }),
+          mapToEditPanelValues: (cfg) => new Map([
+            ['app_title', cfg.app_title || defaultConfig.app_title]
+          ])
+        });
+      }
+
+      // Initialize Data SDK
+      if (window.dataSdk) {
+        const result = await window.dataSdk.init(dataHandler);
+        if (!result.isOk) {
+          showToast('Failed to initialize data storage', 'error');
+        }
+      }
+
+      // Set initial date
+      const today = new Date();
+      document.getElementById('new-group-start-date').valueAsDate = today;
+
+      // Initialize template days structure
+      initializeTemplateDays();
+      
+      // Apply initial config
+      applyConfig();
+      
+      // Navigate to dashboard
+      navigate('dashboard');
+    }
+
+    function applyConfig() {
+      document.getElementById('app-title').textContent = config.app_title || defaultConfig.app_title;
+      document.body.style.backgroundColor = config.background_color || defaultConfig.background_color;
+      document.body.style.color = config.text_color || defaultConfig.text_color;
+    }
+
+    function initializeTemplateDays() {
+      templateDays = [];
+      for (let i = 0; i < 14; i++) {
+        templateDays.push({ day: i + 1, tasks: [] });
+      }
+    }
+
+    // ============ NAVIGATION ============
+    function navigate(view, params = {}) {
+      currentView = view;
+      
+      // Hide all views
+      document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+      
+      // Update nav tabs
+      document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.classList.remove('tab-active', 'border-blue-600', 'text-blue-600');
+        tab.classList.add('border-transparent');
+      });
+      
+      const activeTab = document.querySelector(`.nav-tab[data-tab="${view}"]`);
+      if (activeTab) {
+        activeTab.classList.add('tab-active', 'border-blue-600', 'text-blue-600');
+      }
+      
+      // Show target view
+      const viewEl = document.getElementById(`view-${view}`);
+      if (viewEl) {
+        viewEl.classList.remove('hidden');
+      }
+      
+      // Render view content
+      renderCurrentView();
+    }
+
+    function renderCurrentView() {
+      switch (currentView) {
+        case 'dashboard':
+          renderDashboard();
+          break;
+        case 'groups':
+          renderGroups();
+          break;
+        case 'group-detail':
+          renderGroupDetail();
+          break;
+        case 'templates':
+          renderTemplates();
+          break;
+        case 'template-editor':
+          renderTemplateEditor();
+          break;
+      }
+      
+      // Update admin UI
+      updateAdminUI();
+    }
+
+    // ============ ADMIN FUNCTIONS ============
+    function toggleAdminModal() {
+      const modal = document.getElementById('admin-modal');
+      modal.classList.toggle('hidden');
+      
+      if (isAdmin) {
+        document.getElementById('admin-login-form').classList.add('hidden');
+        document.getElementById('admin-logout-form').classList.remove('hidden');
+      } else {
+        document.getElementById('admin-login-form').classList.remove('hidden');
+        document.getElementById('admin-logout-form').classList.add('hidden');
+      }
+    }
+
+    function closeAdminModal() {
+      document.getElementById('admin-modal').classList.add('hidden');
+      document.getElementById('admin-error').classList.add('hidden');
+      document.getElementById('admin-code-input').value = '';
+      document.getElementById('admin-email-input').value = '';
+    }
+
+    function verifyAdmin() {
+      const code = document.getElementById('admin-code-input').value.trim();
+      const email = document.getElementById('admin-email-input').value.trim().toLowerCase();
+      const errorEl = document.getElementById('admin-error');
+      
+      if (code !== ADMIN_CONFIG.code) {
+        errorEl.textContent = 'Invalid admin code';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      
+      if (!ADMIN_CONFIG.allowedEmails.includes(email)) {
+        errorEl.textContent = 'Email not authorized for admin access';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      
+      isAdmin = true;
+      sessionStorage.setItem('isAdmin', 'true');
+      closeAdminModal();
+      updateAdminUI();
+      showToast('Admin access granted', 'success');
+    }
+
+    function logoutAdmin() {
+      isAdmin = false;
+      sessionStorage.removeItem('isAdmin');
+      closeAdminModal();
+      updateAdminUI();
+      showToast('Logged out from admin mode', 'info');
+    }
+
+    function updateAdminUI() {
+      const badge = document.getElementById('admin-badge');
+      const createTemplateBtn = document.getElementById('create-template-btn');
+      
+      if (isAdmin) {
+        badge.classList.remove('hidden');
+        createTemplateBtn.classList.remove('hidden');
+        createTemplateBtn.classList.add('flex');
+      } else {
+        badge.classList.add('hidden');
+        createTemplateBtn.classList.add('hidden');
+      }
+    }
+
+    // ============ DASHBOARD ============
+    function renderDashboard() {
+      const container = document.getElementById('dashboard-tasks');
+      const activeGroups = groups.filter(g => {
+        const endDate = new Date(g.startDate);
+        endDate.setDate(endDate.getDate() + 14);
+        return new Date() <= endDate;
+      });
+      
+      if (activeGroups.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-400">
+            <p class="text-4xl mb-2">📋</p>
+            <p>No active groups yet. Create a group to get started.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      let html = '';
+      
+      activeGroups.forEach(group => {
+        const dayInfo = getGroupDayInfo(group);
+        if (dayInfo.currentDay < 1 || dayInfo.currentDay > 14) return;
+        
+        const tasks = getTasksForDay(group, dayInfo.currentDay);
+        const todayTasks = tasks.filter(t => {
+          const status = getTaskStatus(group, dayInfo.currentDay, t);
+          return status !== 'completed';
+        });
+        
+        if (todayTasks.length === 0) return;
+        
+        html += `
+          <div class="bg-white rounded-xl border border-slate-200 p-4 mb-4">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="font-semibold text-slate-800">${escapeHtml(group.name)}</h3>
+                <p class="text-sm text-slate-500">Day ${dayInfo.currentDay} of 14</p>
+              </div>
+              <button onclick="viewGroup('${group.__backendId}')" class="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                View Details →
+              </button>
+            </div>
+            <div class="space-y-2">
+              ${todayTasks.sort((a, b) => a.time.localeCompare(b.time)).map(task => {
+                const status = getTaskStatus(group, dayInfo.currentDay, task);
+                return `
+                  <div class="flex items-center justify-between p-3 rounded-lg task-card ${getStatusClass(status)}">
+                    <div class="flex items-center gap-3">
+                      <span class="text-lg">${getTaskIcon(task.type)}</span>
+                      <div>
+                        <p class="font-medium">${escapeHtml(task.title)}</p>
+                        <p class="text-xs opacity-75">${formatTime(task.time)}</p>
+                      </div>
+                    </div>
+                    <button onclick="openTaskModal('${group.__backendId}', ${dayInfo.currentDay}, '${task.id}')" class="px-3 py-1 bg-white/50 rounded text-sm font-medium hover:bg-white/75 transition">
+                      View
+                    </button>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      });
+      
+      if (!html) {
+        html = `
+          <div class="text-center py-12 text-slate-400">
+            <p class="text-4xl mb-2">✅</p>
+            <p>All tasks completed for today!</p>
+          </div>
+        `;
+      }
+      
+      container.innerHTML = html;
+    }
+
+    // ============ GROUPS ============
+    function renderGroups() {
+      const container = document.getElementById('groups-list');
+      
+      if (groups.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-400 col-span-full">
+            <p class="text-4xl mb-2">👥</p>
+            <p>No groups created yet.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = groups.map(group => {
+        const dayInfo = getGroupDayInfo(group);
+        const template = templates.find(t => t.__backendId === group.templateId);
+        const statusClass = dayInfo.currentDay > 14 ? 'bg-slate-100 text-slate-500' : 
+                          dayInfo.currentDay < 1 ? 'bg-blue-100 text-blue-700' : 
+                          'bg-green-100 text-green-700';
+        const statusText = dayInfo.currentDay > 14 ? 'Completed' : 
+                          dayInfo.currentDay < 1 ? 'Upcoming' : 
+                          `Day ${dayInfo.currentDay}/14`;
+        
+        return `
+          <div class="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition cursor-pointer" onclick="viewGroup('${group.__backendId}')">
+            <div class="flex items-start justify-between mb-3">
+              <h3 class="font-semibold text-slate-800">${escapeHtml(group.name)}</h3>
+              <span class="px-2 py-1 text-xs font-medium rounded ${statusClass}">${statusText}</span>
+            </div>
+            <p class="text-sm text-slate-500 mb-2">Template: ${template ? escapeHtml(template.name) : 'Unknown'}</p>
+            <p class="text-sm text-slate-500">Started: ${formatDate(group.startDate)}</p>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openCreateGroupModal() {
+      const modal = document.getElementById('create-group-modal');
+      const select = document.getElementById('new-group-template');
+      
+      // Populate template select
+      select.innerHTML = '<option value="">Choose a template...</option>' +
+        templates.map(t => `<option value="${t.__backendId}">${escapeHtml(t.name)}</option>`).join('');
+      
+      document.getElementById('create-group-error').classList.add('hidden');
+      modal.classList.remove('hidden');
+    }
+
+    function closeCreateGroupModal() {
+      document.getElementById('create-group-modal').classList.add('hidden');
+      document.getElementById('new-group-name').value = '';
+      document.getElementById('new-group-template').value = '';
+      document.getElementById('new-group-whatsapp').value = '';
+    }
+
+    async function createGroup() {
+      const name = document.getElementById('new-group-name').value.trim();
+      const templateId = document.getElementById('new-group-template').value;
+      const startDate = document.getElementById('new-group-start-date').value;
+      const whatsappLink = document.getElementById('new-group-whatsapp').value.trim();
+      const errorEl = document.getElementById('create-group-error');
+      const submitBtn = document.getElementById('create-group-submit');
+      
+      // Validation
+      if (!name || !templateId || !startDate || !whatsappLink) {
+        errorEl.textContent = 'All fields are required';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      
+      if (!whatsappLink.startsWith('https://chat.whatsapp.com/')) {
+        errorEl.textContent = 'Please enter a valid WhatsApp group link';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+
+      // Check data limit
+      if (allData.length >= 999) {
+        errorEl.textContent = 'Maximum data limit reached. Please delete some items first.';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      
+      // Get template tasks
+      const template = templates.find(t => t.__backendId === templateId);
+      if (!template) {
+        errorEl.textContent = 'Selected template not found';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creating...';
+      
+      const result = await window.dataSdk.create({
+        type: 'group',
+        name: name,
+        templateId: templateId,
+        startDate: startDate,
+        whatsappLink: whatsappLink,
+        tasks: template.tasks || '[]',
+        createdAt: new Date().toISOString()
+      });
+      
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Group';
+      
+      if (result.isOk) {
+        closeCreateGroupModal();
+        showToast('Group created successfully', 'success');
+      } else {
+        errorEl.textContent = 'Failed to create group. Please try again.';
+        errorEl.classList.remove('hidden');
+      }
+    }
+
+    function viewGroup(groupId) {
+      currentGroupId = groupId;
+      currentGroupTab = 'today';
+      navigate('group-detail');
+    }
+
+    // ============ GROUP DETAIL ============
+    function renderGroupDetail() {
+      const group = groups.find(g => g.__backendId === currentGroupId);
+      if (!group) {
+        navigate('groups');
+        return;
+      }
+      
+      const dayInfo = getGroupDayInfo(group);
+      
+      document.getElementById('group-detail-name').textContent = group.name;
+      document.getElementById('group-detail-dates').textContent = 
+        dayInfo.currentDay < 1 ? `Starts on ${formatDate(group.startDate)}` :
+        dayInfo.currentDay > 14 ? 'Internship completed' :
+        `Day ${dayInfo.currentDay} of 14 • ${formatDate(group.startDate)} - ${formatDate(dayInfo.endDate)}`;
+      
+      document.getElementById('group-whatsapp-btn').href = group.whatsappLink;
+      
+      // Update tab state
+      document.querySelectorAll('.group-tab').forEach(tab => {
+        tab.classList.remove('tab-active', 'border-blue-600', 'text-blue-600');
+        if (tab.dataset.tab === currentGroupTab) {
+          tab.classList.add('tab-active', 'border-blue-600', 'text-blue-600');
+        }
+      });
+      
+      renderGroupTabContent(group, dayInfo);
+    }
+
+    function switchGroupTab(tab) {
+      currentGroupTab = tab;
+      renderGroupDetail();
+    }
+
+    function renderGroupTabContent(group, dayInfo) {
+      const container = document.getElementById('group-tab-content');
+      
+      switch (currentGroupTab) {
+        case 'today':
+          renderTodayTasks(container, group, dayInfo);
+          break;
+        case 'remaining':
+          renderRemainingTasks(container, group, dayInfo);
+          break;
+        case 'all':
+          renderAllDays(container, group, dayInfo);
+          break;
+      }
+    }
+
+    function renderTodayTasks(container, group, dayInfo) {
+      if (dayInfo.currentDay < 1) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-400">
+            <p class="text-4xl mb-2">📅</p>
+            <p>This internship hasn't started yet.</p>
+            <p class="text-sm mt-1">Starts on ${formatDate(group.startDate)}</p>
+          </div>
+        `;
+        return;
+      }
+      
+      if (dayInfo.currentDay > 14) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-400">
+            <p class="text-4xl mb-2">🎉</p>
+            <p>This internship has been completed!</p>
+          </div>
+        `;
+        return;
+      }
+      
+      const tasks = getTasksForDay(group, dayInfo.currentDay);
+      
+      if (tasks.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-400">
+            <p class="text-4xl mb-2">📭</p>
+            <p>No tasks scheduled for today.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      const sortedTasks = tasks.sort((a, b) => a.time.localeCompare(b.time));
+      
+      container.innerHTML = `
+        <div class="space-y-3">
+          ${sortedTasks.map(task => {
+            const status = getTaskStatus(group, dayInfo.currentDay, task);
+            return `
+              <div class="flex items-center justify-between p-4 rounded-lg task-card ${getStatusClass(status)} cursor-pointer" onclick="openTaskModal('${group.__backendId}', ${dayInfo.currentDay}, '${task.id}')">
+                <div class="flex items-center gap-4">
+                  <span class="text-2xl">${getTaskIcon(task.type)}</span>
+                  <div>
+                    <p class="font-semibold">${escapeHtml(task.title)}</p>
+                    <p class="text-sm opacity-75">${formatTime(task.time)} • ${capitalizeFirst(task.type)}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="px-2 py-1 text-xs font-medium rounded bg-white/50">${capitalizeFirst(status)}</span>
+                  <span class="text-slate-400">→</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    function renderRemainingTasks(container, group, dayInfo) {
+      const allTasks = [];
+      
+      for (let day = 1; day <= 14; day++) {
+        const tasks = getTasksForDay(group, day);
+        tasks.forEach(task => {
+          const status = getTaskStatus(group, day, task);
+          if (status !== 'completed') {
+            allTasks.push({ ...task, day, status });
+          }
+        });
+      }
+      
+      if (allTasks.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-400">
+            <p class="text-4xl mb-2">✅</p>
+            <p>All tasks have been completed!</p>
+          </div>
+        `;
+        return;
+      }
+      
+      // Sort by day then time
+      allTasks.sort((a, b) => {
+        if (a.day !== b.day) return a.day - b.day;
+        return a.time.localeCompare(b.time);
+      });
+      
+      container.innerHTML = `
+        <div class="space-y-3">
+          ${allTasks.map(task => `
+            <div class="flex items-center justify-between p-4 rounded-lg task-card ${getStatusClass(task.status)} cursor-pointer" onclick="openTaskModal('${group.__backendId}', ${task.day}, '${task.id}')">
+              <div class="flex items-center gap-4">
+                <span class="text-2xl">${getTaskIcon(task.type)}</span>
+                <div>
+                  <p class="font-semibold">${escapeHtml(task.title)}</p>
+                  <p class="text-sm opacity-75">Day ${task.day} • ${formatTime(task.time)} • ${capitalizeFirst(task.type)}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="px-2 py-1 text-xs font-medium rounded bg-white/50">${capitalizeFirst(task.status)}</span>
+                <span class="text-slate-400">→</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function renderAllDays(container, group, dayInfo) {
+      let html = '<div class="grid gap-4 md:grid-cols-2">';
+      
+      for (let day = 1; day <= 14; day++) {
+        const tasks = getTasksForDay(group, day);
+        const isPast = day < dayInfo.currentDay;
+        const isFuture = day > dayInfo.currentDay;
+        const isCurrent = day === dayInfo.currentDay;
+        
+        const completedCount = tasks.filter(t => getTaskStatus(group, day, t) === 'completed').length;
+        
+        let dayClass = 'bg-white border-slate-200';
+        let statusBadge = '';
+        
+        if (isPast) {
+          dayClass = 'bg-slate-50 border-slate-200';
+          statusBadge = '<span class="px-2 py-0.5 text-xs bg-slate-200 text-slate-600 rounded">Past</span>';
+        } else if (isFuture) {
+          dayClass = 'bg-white border-slate-200 opacity-60';
+          statusBadge = '<span class="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">Locked</span>';
+        } else if (isCurrent) {
+          dayClass = 'bg-blue-50 border-blue-300';
+          statusBadge = '<span class="px-2 py-0.5 text-xs bg-blue-600 text-white rounded">Today</span>';
+        }
+        
+        html += `
+          <div class="p-4 rounded-xl border ${dayClass}">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-semibold text-slate-800">Day ${day}</h4>
+              <div class="flex items-center gap-2">
+                ${statusBadge}
+                <span class="text-sm text-slate-500">${completedCount}/${tasks.length}</span>
+              </div>
+            </div>
+            <div class="space-y-2">
+              ${tasks.length === 0 ? '<p class="text-sm text-slate-400">No tasks</p>' : 
+                tasks.sort((a, b) => a.time.localeCompare(b.time)).map(task => {
+                  const status = getTaskStatus(group, day, task);
+                  const canInteract = !isFuture;
+                  return `
+                    <div class="flex items-center justify-between p-2 rounded ${getStatusClass(status)} ${canInteract ? 'cursor-pointer' : ''}" ${canInteract ? `onclick="openTaskModal('${group.__backendId}', ${day}, '${task.id}')"` : ''}>
+                      <div class="flex items-center gap-2">
+                        <span>${getTaskIcon(task.type)}</span>
+                        <span class="text-sm font-medium">${escapeHtml(task.title)}</span>
+                      </div>
+                      <span class="text-xs opacity-75">${formatTime(task.time)}</span>
+                    </div>
+                  `;
+                }).join('')
+              }
+            </div>
+          </div>
+        `;
+      }
+      
+   
